@@ -1,0 +1,120 @@
+<!--
+Copyright (c) 2016 The Ayla Project Authors.
+This code may only be used under the MIT style license found at http://aylaweb.github.io/LICENSE.txt
+The complete set of authors may be found at http://aylaweb.github.io/AUTHORS.txt
+The complete set of contributors may be found at http://aylaweb.github.io/CONTRIBUTORS.txt
+-->
+
+<link rel="import" href="../polymer/polymer.html">
+<link rel="import" href="../libs-html/lodash.html">
+<link rel="import" href="../ayla/ayla.html">
+
+<script>
+    Ayla = window.Ayla || {};
+    Ayla.VipRuleBehavior = {
+        properties: {
+            rules: {
+                type: Array,
+                value: function () {
+                    return [];
+                },
+                observer: '_rulesInitChanged'
+            },
+            observations: {
+                type: Array,
+                value: function () {
+                    return [];
+                }
+            }
+        },
+        observers: ['_rulesChanged(rules.splices)'],
+        created: function () {
+            console.log(this.id + " -> " + this.localName + " -> vip-rule -> Event created");
+            for (var property in this._propertyEffects) {
+                (function (prop) {
+                    this['_trackerDep_' + prop] = new Tracker.Dependency;
+                    if (prop.charAt(0) !== '_')
+                    {
+                        // this["observable_" + property] = Rx.Observable.fromEvent(this, Polymer.CaseMap.camelToDashCase(property) + '-changed');
+                        this["observable" + property + "Confirm"] = Rx.Observable.fromEvent(this, Polymer.CaseMap.camelToDashCase(property) + '-changed-confirm');
+                    }
+                    this.addEventListener(Polymer.CaseMap.camelToDashCase(prop) + '-changed', function (e) {
+                        if (this['_trackerDep_' + prop])
+                        {
+                            this['_trackerDep_' + prop].changed();
+                        }
+                        /*      if (this.mux) {
+                         // var event = new CustomEvent(Polymer.CaseMap.camelToDashCase(this[this.mux] + "$" + prop) + '-changed', e.detail);
+                         // this.dispatchEvent(event);
+                         this.fire(Polymer.CaseMap.camelToDashCase(this[this.mux] + "$" + prop) + '-changed', e.detail);
+                         } */
+                        if (this.mux) {
+                            this.fire(this[this.mux] + "$" + Polymer.CaseMap.camelToDashCase(prop) + '-changed', e.detail);
+                            this.fire(Polymer.CaseMap.camelToDashCase(prop) + '-specific', e.detail);
+                            window.setTimeout(function () {
+                                this.fire(Polymer.CaseMap.camelToDashCase(prop) + '-changed-confirm', e.detail);
+                            }.bind(this));
+                        }
+
+
+                    });
+                }.bind(this))(property);
+            }
+        },
+        attached: function () {
+            console.log(this.id + " -> " + this.localName + " -> vip-rule -> Event attached");
+        },
+        ready: function () {
+            console.log(this.id + " -> " + this.localName + " -> vip-rule -> Event ready");
+        },
+        detached: function () {
+            console.log(this.id + " -> " + this.localName + " -> vip-rule -> Event detached");
+        },
+        processRule: function (ruleConfig) {
+            var rule = Object.create(Ayla.Rule).activate(this, ruleConfig);
+            this.observations.push(rule);
+            //Polymer.Base.extend(ruleConfig, Ayla.Rule);
+            //ruleConfig.activate(this);
+        },
+        _rulesInitChanged: function (val, old) {
+            if (val) {
+                if (typeof val === "string")
+                {
+                    this.rules = JSON.parse(val);
+                }
+                else {
+                    val.forEach(function (ruleConfig) {
+                        Tracker.autorun(function () {
+                            if (ruleConfig.rule) {
+                                ruleConfig.rule.destroy();
+                            }
+                            this.processRule(ruleConfig);
+                        }.bind(this));
+                    }, this);
+                }
+            }
+        },
+        _rulesChanged: function (changeRecord) {
+            if (changeRecord) {
+                changeRecord.indexSplices.forEach(function (s) {
+                    if (s.addedCount > 0) {
+                        var newRules = s.object.slice(s.index, s.index + s.addedCount);
+                        newRules.forEach(function (ruleConfig) {
+                            Tracker.autorun(function () {
+                                if (ruleConfig.rule) {
+                                    ruleConfig.rule.destroy();
+                                }
+                                this.processRule(ruleConfig);
+                            }.bind(this));
+                        }, this);
+                    }
+                    else if (s.removed.length > 0) {
+                        s.removed.forEach(function (rule) {
+                            //  rule.rule.destroy();
+                        }, this)
+                    }
+                }, this);
+            }
+        }
+    };
+</script>
